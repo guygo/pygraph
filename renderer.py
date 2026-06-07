@@ -95,11 +95,35 @@ def _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H):
             slot.geometry.draw(GL_POINTS)
             continue
 
-        # ── Line from data or KDE ─────────────────────────────────────────────
-        if pt in (PLOT_LINE_DATA, PLOT_KDE):
+        # ── KDE: filled area + curve line ────────────────────────────────────
+        if pt == PLOT_KDE:
             if slot.geometry is None:
                 continue
-            draw_mode = GL_LINE_STRIP if slot.connect_lines else GL_POINTS
+            # Semi-transparent fill
+            if slot.hist_geo is not None:
+                prog_f = state.plot_fill_shader
+                glUseProgram(prog_f)
+                glUniform2f(glGetUniformLocation(prog_f, "uMinBounds"), state.min_x, state.min_y)
+                glUniform2f(glGetUniformLocation(prog_f, "uMaxBounds"), state.max_x, state.max_y)
+                glUniform3f(glGetUniformLocation(prog_f, "uColor"),     *slot.color)
+                glUniform1f(glGetUniformLocation(prog_f, "uAlpha"),     0.35)
+                slot.hist_geo.draw()
+            # Solid curve on top
+            prog = state.plot_solid_shader
+            glUseProgram(prog)
+            glUniform2f(glGetUniformLocation(prog, "uMinBounds"), state.min_x, state.min_y)
+            glUniform2f(glGetUniformLocation(prog, "uMaxBounds"), state.max_x, state.max_y)
+            glUniform3f(glGetUniformLocation(prog, "uColor"),     *slot.color)
+            glUniform1f(glGetUniformLocation(prog, "uLineWidth"), slot.line_thickness)
+            glUniform2f(glGetUniformLocation(prog, "uViewport"),  float(fb_pw), float(fb_ph))
+            _set_log_uniforms(prog, state)
+            slot.geometry.draw(GL_LINE_STRIP)
+            continue
+
+        # ── Line from data ────────────────────────────────────────────────────
+        if pt == PLOT_LINE_DATA:
+            if slot.geometry is None:
+                continue
             prog = state.plot_solid_shader
             glUseProgram(prog)
             glUniform2f(glGetUniformLocation(prog, "uMinBounds"), state.min_x, state.min_y)

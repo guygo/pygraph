@@ -33,9 +33,26 @@ class HistogramPlot:
         glBindBuffer(GL_ARRAY_BUFFER, self._vbo)
         glBufferData(GL_ARRAY_BUFFER, v.nbytes, v, GL_DYNAMIC_DRAW)
 
+    def update_fill_strip(self, x_arr, y_arr):
+        """Store a filled area under a curve as GL_TRIANGLE_STRIP (for KDE)."""
+        n = len(x_arr)
+        if n == 0:
+            self._vertex_count = 0
+            return
+        # Interleave baseline and curve: (x,0),(x,y),(x+1,0),(x+1,y+1),...
+        verts = np.empty((n * 2, 2), dtype=np.float32)
+        verts[0::2, 0] = x_arr
+        verts[0::2, 1] = 0.0
+        verts[1::2, 0] = x_arr
+        verts[1::2, 1] = y_arr
+        self._vertex_count = n * 2
+        self._draw_mode = GL_TRIANGLE_STRIP
+        glBindBuffer(GL_ARRAY_BUFFER, self._vbo)
+        glBufferData(GL_ARRAY_BUFFER, verts.nbytes, verts, GL_DYNAMIC_DRAW)
+
     def draw(self):
         if self._vertex_count == 0:
             return
         glBindVertexArray(self._vao)
-        glDrawArrays(GL_TRIANGLES, 0, self._vertex_count)
+        glDrawArrays(getattr(self, '_draw_mode', GL_TRIANGLES), 0, self._vertex_count)
         glBindVertexArray(0)

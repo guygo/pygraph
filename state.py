@@ -538,6 +538,7 @@ class AppState:
             kde  = np.exp(-0.5 * diff ** 2).sum(axis=1) / (len(values) * h * np.sqrt(2 * np.pi))
             kde  = kde.astype(np.float32)
             slot.geometry.update_data(x, kde)
+            slot.hist_geo.update_fill_strip(x, kde)
             slot._sampled_y = kde
             pad_x = (hi - lo) * 0.05
             self.min_x = float(lo) - pad_x
