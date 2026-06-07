@@ -44,6 +44,11 @@ def draw_axis_labels(state):
         screen_x_origin = px + 10.0
 
     # ── Y-axis tick labels ───────────────────────────────────────────────────
+    def _y_label_x(lbl):
+        """Place label to the LEFT of the y-axis line, clamped inside the plot."""
+        tw = imgui.calc_text_size(lbl).x
+        return max(screen_x_origin - tw - 4, px + 2)
+
     if state.log_scale_y and state.min_y > 0:
         lo_y = max(state.min_y, 1e-10)
         hi_y = max(state.max_y, lo_y * 1.001)
@@ -55,15 +60,17 @@ def draw_axis_labels(state):
                     frac = (np.log(v) - np.log(lo_y)) / (np.log(hi_y) - np.log(lo_y))
                     sy = py + ph * (1.0 - frac)
                     lbl = f"1e{e}" if m == 1 else format_label(v)
-                    draw_list.add_text(imgui.ImVec2(screen_x_origin + 4, sy - 10),
+                    draw_list.add_text(imgui.ImVec2(_y_label_x(lbl), sy - 10),
                                        text_color, lbl)
     else:
         val = np.floor(state.min_y / spacing_y) * spacing_y
         while val <= state.max_y + spacing_y:
-            sx, sy = data_to_screen(state, 0.0, val)
-            if py - 10 < sy < py + ph + 10:
-                draw_list.add_text(imgui.ImVec2(screen_x_origin + 4, sy - 10),
-                                   text_color, format_label(val))
+            if abs(val) > spacing_y * 0.01:   # skip y≈0; origin label handles it
+                sx, sy = data_to_screen(state, 0.0, val)
+                if py - 10 < sy < py + ph + 10:
+                    lbl = format_label(val)
+                    draw_list.add_text(imgui.ImVec2(_y_label_x(lbl), sy - 10),
+                                       text_color, lbl)
             val += spacing_y
 
     if state.min_y <= 0.0 <= state.max_y:
@@ -88,11 +95,17 @@ def draw_axis_labels(state):
     else:
         val = np.floor(state.min_x / spacing_x) * spacing_x
         while val <= state.max_x + spacing_x:
-            if abs(val) > spacing_x * 0.01:
+            if abs(val) > spacing_x * 0.01:   # skip x≈0; origin label handles it
                 sx, _ = data_to_screen(state, val, 0.0)
                 if px - 10 < sx < px + pw + 10:
-                    draw_list.add_text(imgui.ImVec2(sx - 10, screen_y_origin + 4),
-                                       text_color, format_label(val))
+                    lbl = format_label(val)
+                    tw = imgui.calc_text_size(lbl).x
+                    # Centre label on tick; clamp so it never clips at either edge
+                    tx = sx - tw / 2
+                    tx = max(tx, px + 2)
+                    tx = min(tx, px + pw - tw - 2)
+                    draw_list.add_text(imgui.ImVec2(tx, screen_y_origin + 4),
+                                       text_color, lbl)
             val += spacing_x
 
     if (state.min_x <= 0.0 <= state.max_x and state.min_y <= 0.0 <= state.max_y

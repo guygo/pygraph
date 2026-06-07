@@ -39,6 +39,8 @@ def format_label(val):
     """Format axis label cleanly."""
     if val == 0:
         return "0"
+    # Snap to 10 significant figures to eliminate floating-point drift from tick loops
+    val = float(f"{val:.10g}")
     abs_val = abs(val)
     if abs_val >= 1000 or (abs_val < 0.01 and abs_val > 0):
         return f"{val:.2e}"

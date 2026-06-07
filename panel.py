@@ -4,8 +4,8 @@ from plot_slot import (PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA,
                        PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN,
                        PLOT_TYPE_NAMES)
 
-_INPUT_DARK = imgui.ImVec4(0.08, 0.12, 0.28, 1.0)
-_INPUT_TEXT = imgui.ImVec4(1.00, 1.00, 1.00, 1.0)
+_INPUT_DARK = imgui.ImVec4(0.90, 0.90, 0.90, 1.0)   # match the app's light-gray input theme
+_INPUT_TEXT = imgui.ImVec4(0.05, 0.05, 0.05, 1.0)  # dark text on light background
 _ERR_COLOR  = imgui.ImVec4(0.9, 0.2, 0.2, 1.0)
 
 _COLORMAP_NAMES = [

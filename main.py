@@ -178,12 +178,16 @@ def _setup_style():
 
 if __name__ == "__main__":
     params = hello_imgui.RunnerParams()
-    params.app_window_params.window_title = "Fast OpenGL Math Plotter (Pan & Zoom Demo)"
+    params.app_window_params.window_title = "PyGraph"
     params.app_window_params.window_geometry.size = (1280, 720)
     params.imgui_window_params.default_imgui_window_type = (
         hello_imgui.DefaultImGuiWindowType.no_default_window
     )
     params.imgui_window_params.show_menu_bar = True
+    try:
+        params.imgui_window_params.menu_app_title = ""   # suppress duplicate title in menu bar
+    except AttributeError:
+        pass
 
     params.callbacks.post_init         = _guarded(_on_init)
     params.callbacks.setup_imgui_style = _guarded(_setup_style)
