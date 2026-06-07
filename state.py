@@ -945,36 +945,53 @@ class AppState:
         return MVP, M, cam_model
 
     def save_screenshot(self):
-        """Read the current framebuffer and save as PNG via a tkinter save dialog."""
-        import threading
+        """Read the current framebuffer and save as PNG.
+
+        Strategy: read pixels and write a temp PNG synchronously on the main
+        thread (safe — OpenGL context is current here), then hand off to a
+        subprocess that shows the native save dialog and copies the file to
+        the user-chosen location.  Using a subprocess avoids the macOS
+        restriction that Tk/Cocoa dialogs must run on the main thread.
+        """
+        import sys, subprocess, tempfile, threading, os
+
+        try:
+            from PIL import Image
+        except ImportError:
+            self.last_error = "Save PNG requires Pillow: pip install Pillow"
+            return
 
         io = imgui.get_io()
         W  = int(io.display_size.x * io.display_framebuffer_scale.x)
         H  = int(io.display_size.y * io.display_framebuffer_scale.y)
 
         glPixelStorei(GL_PACK_ALIGNMENT, 1)
-        pixels = glReadPixels(0, 0, W, H, GL_RGB, GL_UNSIGNED_BYTE)
+        raw = glReadPixels(0, 0, W, H, GL_RGB, GL_UNSIGNED_BYTE)
+        buf = np.frombuffer(raw, dtype=np.uint8).reshape(H, W, 3)[::-1]
+        img = Image.fromarray(buf)
 
-        def _save(pixels, W, H):
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.close()
+        img.save(tmp.name)
+
+        _DIALOG = (
+            "import sys, shutil, tkinter as tk; from tkinter import filedialog; "
+            "root=tk.Tk(); root.withdraw(); root.attributes('-topmost',True); "
+            "p=filedialog.asksaveasfilename("
+            "  title='Save Screenshot',"
+            "  defaultextension='.png',"
+            "  filetypes=[('PNG image','*.png'),('All files','*')]"
+            "); "
+            "shutil.copy(sys.argv[1], p) if p else None"
+        )
+
+        def _show_dialog(tmp_path):
             try:
-                from PIL import Image
-                import numpy as np
-                img = Image.frombytes("RGB", (W, H), pixels)
-                img = img.transpose(Image.FLIP_TOP_BOTTOM)
-
-                import tkinter as tk
-                from tkinter import filedialog
-                root = tk.Tk(); root.withdraw()
-                root.attributes("-topmost", True)
-                path = filedialog.asksaveasfilename(
-                    title="Save Screenshot",
-                    defaultextension=".png",
-                    filetypes=[("PNG image", "*.png"), ("All files", "*")],
-                )
-                root.destroy()
-                if path:
-                    img.save(path)
+                subprocess.run([sys.executable, "-c", _DIALOG, tmp_path],
+                               timeout=300)
             except Exception as e:
-                self.last_error = f"Screenshot error: {e}"
+                self.last_error = f"Save dialog error: {e}"
+            finally:
+                os.unlink(tmp_path)
 
-        threading.Thread(target=_save, args=(pixels, W, H), daemon=True).start()
+        threading.Thread(target=_show_dialog, args=(tmp.name,), daemon=True).start()
