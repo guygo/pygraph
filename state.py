@@ -155,6 +155,12 @@ class AppState:
         # ── misc ──────────────────────────────────────────────────────────────
         self.panel_open  = True
         self.panel_width = 280
+        self._save_screenshot_requested = False
+        self._zoom_box_active = False
+        self._zoom_box_start  = (0.0, 0.0)  # screen coords where Shift+drag began
+        self.pinned_points: list = []        # list of (x, y, label_str) tuples
+        self.dark_mode: bool = False
+        self._dark_mode_dirty: bool = False  # set True when toggled to re-apply style
 
         self.math_data_needs_update   = False
         self.math_data_needs_update3d = False
@@ -762,6 +768,27 @@ class AppState:
 
         mouse_in_plot = (px <= mx <= px + pw) and (py <= my <= py + ph)
 
+        # ── Global keyboard shortcuts (skip when typing in an input field) ────
+        if not io.want_capture_keyboard:
+            # R → fit view
+            if imgui.is_key_pressed(imgui.Key.r):
+                if not self.mode_3d:
+                    self.zoom_to_fit_2d()
+                else:
+                    from panel import _CAM_THETA_DEFAULT, _CAM_PHI_DEFAULT, _CAM_DIST_DEFAULT
+                    self.cam_theta = _CAM_THETA_DEFAULT
+                    self.cam_phi   = _CAM_PHI_DEFAULT
+                    self.cam_dist  = _CAM_DIST_DEFAULT
+
+            # Space → animation play/pause (2D only)
+            if imgui.is_key_pressed(imgui.Key.space) and not self.mode_3d:
+                if self.anim_enabled:
+                    self.anim_playing = not self.anim_playing
+
+            # Ctrl+S → screenshot
+            if io.key_ctrl and imgui.is_key_pressed(imgui.Key.s):
+                self._save_screenshot_requested = True
+
         if io.want_capture_mouse and not mouse_in_plot:
             return
 
@@ -771,15 +798,77 @@ class AppState:
             self._process_2d_interactions(io, mouse_in_plot, px, py, pw, ph)
 
     def _process_2d_interactions(self, io, mouse_in_plot, px, py, pw, ph):
-        if mouse_in_plot and (
-                imgui.is_mouse_dragging(imgui.MouseButton_.left) or
-                imgui.is_mouse_dragging(imgui.MouseButton_.right)):
+        shift = io.key_shift
+        dragging_left  = imgui.is_mouse_dragging(imgui.MouseButton_.left)
+        dragging_right = imgui.is_mouse_dragging(imgui.MouseButton_.right)
+
+        # Shift+left drag → zoom box
+        if shift and mouse_in_plot and dragging_left:
+            if not self._zoom_box_active:
+                # Record the position where the drag started
+                self._zoom_box_active = True
+                cp = io.mouse_clicked_pos[0]
+                self._zoom_box_start = (cp.x, cp.y)
+        elif self._zoom_box_active and imgui.is_mouse_released(imgui.MouseButton_.left):
+            # Commit zoom to the selected rectangle
+            sx0, sy0 = self._zoom_box_start
+            sx1, sy1 = io.mouse_pos.x, io.mouse_pos.y
+            if abs(sx1 - sx0) > 4 and abs(sy1 - sy0) > 4:
+                rx = self.max_x - self.min_x
+                ry = self.max_y - self.min_y
+                x0d = self.min_x + rx * (min(sx0, sx1) - px) / pw
+                x1d = self.min_x + rx * (max(sx0, sx1) - px) / pw
+                y0d = self.min_y + ry * (1.0 - (max(sy0, sy1) - py) / ph)
+                y1d = self.min_y + ry * (1.0 - (min(sy0, sy1) - py) / ph)
+                self.min_x, self.max_x = x0d, x1d
+                self.min_y, self.max_y = y0d, y1d
+            self._zoom_box_active = False
+        elif not shift:
+            self._zoom_box_active = False
+
+        # Normal pan (no Shift)
+        if not shift and mouse_in_plot and (dragging_left or dragging_right):
             dx = io.mouse_delta.x
             dy = io.mouse_delta.y
             fx = (self.max_x - self.min_x) / pw
             fy = (self.max_y - self.min_y) / ph
             self.min_x -= dx * fx;  self.max_x -= dx * fx
             self.min_y += dy * fy;  self.max_y += dy * fy
+
+        # Double-click → pin/unpin a point
+        if mouse_in_plot and imgui.is_mouse_double_clicked(imgui.MouseButton_.left):
+            rx = self.max_x - self.min_x;  ry = self.max_y - self.min_y
+            click_x = self.min_x + rx * (io.mouse_pos.x - px) / pw
+            click_y = self.min_y + ry * (1.0 - (io.mouse_pos.y - py) / ph)
+            # Snap to nearest equation curve sample if within 20px
+            best_dist, best_pt = 1e9, None
+            for slot in self.plots:
+                if slot.plot_type == 0 and slot._sampled_y is not None:
+                    from plot_slot import PLOT_EQUATION
+                    xs = np.linspace(*self._sample_range(), len(slot._sampled_y), dtype=np.float32)
+                    ys = slot._sampled_y
+                    # Find closest valid sample to click_x
+                    idx = int(np.searchsorted(xs, click_x))
+                    for ci in range(max(0, idx-1), min(len(xs), idx+2)):
+                        sy_px = (py + ph * (1.0 - (ys[ci] - self.min_y) / ry))
+                        sx_px = (px + pw * (xs[ci] - self.min_x) / rx)
+                        dist  = ((sx_px - io.mouse_pos.x)**2 + (sy_px - io.mouse_pos.y)**2)**0.5
+                        if dist < best_dist:
+                            best_dist, best_pt = dist, (float(xs[ci]), float(ys[ci]))
+            if best_pt and best_dist < 20:
+                px_val, py_val = best_pt
+            else:
+                px_val, py_val = click_x, click_y
+            # Toggle: remove if already pinned nearby, else add
+            close = [p for p in self.pinned_points
+                     if abs(p[0] - px_val) < rx * 0.02 and abs(p[1] - py_val) < ry * 0.02]
+            if close:
+                for c in close:
+                    self.pinned_points.remove(c)
+            else:
+                from util import format_label
+                self.pinned_points.append(
+                    (px_val, py_val, f"({format_label(px_val)}, {format_label(py_val)})"))
 
         if mouse_in_plot and io.mouse_wheel != 0.0:
             zf = 1.0 - io.mouse_wheel * 0.08
@@ -801,6 +890,12 @@ class AppState:
         if mouse_in_plot and io.mouse_wheel != 0.0:
             self.cam_dist = float(np.clip(
                 self.cam_dist * (1.0 - io.mouse_wheel * 0.08), 0.3, 30.0))
+        # Double-click → reset camera
+        if mouse_in_plot and imgui.is_mouse_double_clicked(imgui.MouseButton_.left):
+            from panel import _CAM_THETA_DEFAULT, _CAM_PHI_DEFAULT, _CAM_DIST_DEFAULT
+            self.cam_theta = _CAM_THETA_DEFAULT
+            self.cam_phi   = _CAM_PHI_DEFAULT
+            self.cam_dist  = _CAM_DIST_DEFAULT
 
     # ================================================================
     #  3-D MVP
@@ -848,3 +943,38 @@ class AppState:
 
         MVP = (P @ V @ M).astype(np.float32)
         return MVP, M, cam_model
+
+    def save_screenshot(self):
+        """Read the current framebuffer and save as PNG via a tkinter save dialog."""
+        import threading
+
+        io = imgui.get_io()
+        W  = int(io.display_size.x * io.display_framebuffer_scale.x)
+        H  = int(io.display_size.y * io.display_framebuffer_scale.y)
+
+        glPixelStorei(GL_PACK_ALIGNMENT, 1)
+        pixels = glReadPixels(0, 0, W, H, GL_RGB, GL_UNSIGNED_BYTE)
+
+        def _save(pixels, W, H):
+            try:
+                from PIL import Image
+                import numpy as np
+                img = Image.frombytes("RGB", (W, H), pixels)
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
+
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk(); root.withdraw()
+                root.attributes("-topmost", True)
+                path = filedialog.asksaveasfilename(
+                    title="Save Screenshot",
+                    defaultextension=".png",
+                    filetypes=[("PNG image", "*.png"), ("All files", "*")],
+                )
+                root.destroy()
+                if path:
+                    img.save(path)
+            except Exception as e:
+                self.last_error = f"Screenshot error: {e}"
+
+        threading.Thread(target=_save, args=(pixels, W, H), daemon=True).start()

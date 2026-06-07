@@ -2,7 +2,8 @@ import time
 import numpy as np
 from OpenGL.GL import *
 from imgui_bundle import imgui
-from gui import draw_axis_labels, draw_grid_lines, draw_axis_lines
+from gui import (draw_axis_labels, draw_grid_lines, draw_axis_lines,
+                 draw_cursor_readout, draw_zoom_box, draw_pinned_points)
 from overlay3d import draw_3d_overlay
 from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
 
@@ -222,6 +223,9 @@ def _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H, plot_rect=None):
 
     if state.show_axis_grid:
         draw_axis_labels(state)
+    draw_pinned_points(state)
+    draw_zoom_box(state)
+    draw_cursor_readout(state)
 
 
 def _render_3d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H, px, py, pw, ph):
@@ -263,6 +267,17 @@ def _render_3d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H, px, py, pw, ph):
             show_labels=state.show_3d_labels,
             large_font=state.large_font
         )
+
+    # Camera info overlay (bottom-left of plot)
+    draw_list = imgui.get_background_draw_list()
+    th_deg = np.degrees(state.cam_theta)
+    ph_deg = np.degrees(state.cam_phi) % 360
+    info   = f"θ={th_deg:.0f}°  φ={ph_deg:.0f}°  dist={state.cam_dist:.2f}  ⊙dbl-click reset"
+    draw_list.add_text(
+        imgui.ImVec2(px + 6, py + ph - 20),
+        imgui.get_color_u32(imgui.ImVec4(0.6, 0.6, 0.6, 0.9)),
+        info,
+    )
 
 
 def render_frame(state, plot_rect):

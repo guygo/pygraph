@@ -47,3 +47,15 @@ class PlotSlot:
     col_hist: int = 0
     hist_bins: int = 30
     source_file: str = ""
+
+    # ── user-editable label (shown in the plot list) ──────────────────────────
+    label: str = ""               # empty → auto-generated from expr or filename
+
+    def display_label(self):
+        """Return the label shown in the plot list."""
+        if self.label:
+            return self.label
+        if self.plot_type == PLOT_EQUATION:
+            return self.expr[:24] + ("..." if len(self.expr) > 24 else "") if self.expr else "(empty)"
+        type_tag = ["", "scat", "line", "hist", "kde", "heat", "viol"][self.plot_type]
+        return f"{type_tag}:{self.source_file[:18]}"

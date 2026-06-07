@@ -3,6 +3,17 @@ from util import format_label
 import numpy as np
 import math
 
+
+def screen_to_data(state, sx, sy):
+    """Convert screen pixel → data-space coordinates."""
+    px = plot_rect["x"];  py = plot_rect["y"]
+    pw = plot_rect["w"];  ph = plot_rect["h"]
+    rx = state.max_x - state.min_x
+    ry = state.max_y - state.min_y
+    dx = state.min_x + rx * (sx - px) / pw
+    dy = state.min_y + ry * (1.0 - (sy - py) / ph)
+    return dx, dy
+
 # ── plot viewport rect ───────────────────────────────────────────────────────
 # Updated every frame by panel.py before rendering.
 plot_rect = {"x": 0.0, "y": 0.0, "w": 1280.0, "h": 720.0}
@@ -161,3 +172,73 @@ def draw_grid_lines(state):
         draw_list.add_line(imgui.ImVec2(px, sy), imgui.ImVec2(px + pw, sy),
                            grid_color, 1.0)
         val += spacing_y
+
+
+def draw_pinned_points(state):
+    """Draw double-click pin markers with coordinate labels."""
+    if not state.pinned_points:
+        return
+    draw_list  = imgui.get_background_draw_list()
+    dot_col    = imgui.get_color_u32(imgui.ImVec4(0.85, 0.15, 0.15, 1.0))
+    text_col   = imgui.get_color_u32(imgui.ImVec4(0.05, 0.05, 0.05, 1.0))
+    bg_col     = imgui.get_color_u32(imgui.ImVec4(1.0,  1.0,  1.0,  0.85))
+
+    for px_val, py_val, label in state.pinned_points:
+        sx, sy = data_to_screen(state, px_val, py_val)
+        draw_list.add_circle_filled(imgui.ImVec2(sx, sy), 5.0, dot_col)
+        draw_list.add_circle(imgui.ImVec2(sx, sy), 5.0,
+                             imgui.get_color_u32(imgui.ImVec4(1, 1, 1, 1.0)), 0, 1.5)
+        tw = imgui.calc_text_size(label).x
+        th = imgui.calc_text_size(label).y
+        tx, ty = sx + 8, sy - th - 2
+        draw_list.add_rect_filled(
+            imgui.ImVec2(tx - 2, ty - 1), imgui.ImVec2(tx + tw + 2, ty + th + 1),
+            bg_col, 2.0)
+        draw_list.add_text(imgui.ImVec2(tx, ty), text_col, label)
+
+
+def draw_zoom_box(state):
+    """Draw the Shift+drag selection rectangle while zooming."""
+    if not state._zoom_box_active:
+        return
+    io = imgui.get_io()
+    sx0, sy0 = state._zoom_box_start
+    sx1, sy1 = io.mouse_pos.x, io.mouse_pos.y
+    draw_list = imgui.get_background_draw_list()
+    fill  = imgui.get_color_u32(imgui.ImVec4(0.20, 0.45, 0.80, 0.15))
+    border = imgui.get_color_u32(imgui.ImVec4(0.20, 0.45, 0.80, 0.90))
+    draw_list.add_rect_filled(imgui.ImVec2(sx0, sy0), imgui.ImVec2(sx1, sy1), fill)
+    draw_list.add_rect(imgui.ImVec2(sx0, sy0), imgui.ImVec2(sx1, sy1), border, 0.0, 0, 1.5)
+
+
+def draw_cursor_readout(state):
+    """Show x/y data coordinates at the top-right corner of the plot when hovering."""
+    io = imgui.get_io()
+    mx, my = io.mouse_pos.x, io.mouse_pos.y
+    px = plot_rect["x"];  py = plot_rect["y"]
+    pw = plot_rect["w"];  ph = plot_rect["h"]
+
+    if not (px <= mx <= px + pw and py <= my <= py + ph):
+        return
+
+    dx, dy = screen_to_data(state, mx, my)
+    label = f"x = {format_label(dx)}    y = {format_label(dy)}"
+
+    draw_list = imgui.get_background_draw_list()
+    tw = imgui.calc_text_size(label).x
+    th = imgui.calc_text_size(label).y
+    pad = 6.0
+    bg_x0 = px + pw - tw - pad * 2 - 4
+    bg_y0 = py + 4
+    # Subtle frosted background
+    draw_list.add_rect_filled(
+        imgui.ImVec2(bg_x0, bg_y0),
+        imgui.ImVec2(bg_x0 + tw + pad * 2, bg_y0 + th + pad),
+        imgui.get_color_u32(imgui.ImVec4(1.0, 1.0, 1.0, 0.75)),
+        3.0,
+    )
+    draw_list.add_text(
+        imgui.ImVec2(bg_x0 + pad, bg_y0 + pad / 2),
+        imgui.get_color_u32(imgui.ImVec4(0.1, 0.1, 0.1, 1.0)),
+        label,
+    )

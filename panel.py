@@ -18,6 +18,12 @@ _CAM_PHI_DEFAULT   = 0.8
 _CAM_DIST_DEFAULT  = 3.5
 
 
+def _tip(text):
+    """Show a tooltip for the most recently rendered item."""
+    if imgui.is_item_hovered(imgui.HoveredFlags_.delay_short):
+        imgui.set_tooltip(text)
+
+
 def _input_text(label, value, max_size=256):
     imgui.push_style_color(imgui.Col_.frame_bg,         _INPUT_DARK)
     imgui.push_style_color(imgui.Col_.frame_bg_hovered, imgui.ImVec4(0.12, 0.18, 0.38, 1.0))
@@ -75,13 +81,7 @@ def _draw_plot_list(state):
             imgui.ColorEditFlags_.no_tooltip, imgui.ImVec2(14, 14))
         imgui.same_line()
 
-        if slot.plot_type == PLOT_EQUATION:
-            lbl = slot.expr[:22] + ("..." if len(slot.expr) > 22 else "") if slot.expr else "(empty)"
-        else:
-            type_tag = ["", "scat", "line", "hist", "kde", "heat", "viol"][slot.plot_type]
-            lbl = f"{type_tag}:{slot.source_file[:18]}"
-
-        result = imgui.selectable(f"{lbl}##sel{i}", is_active)
+        result = imgui.selectable(f"{slot.display_label()}##sel{i}", is_active)
         clicked = result[0] if isinstance(result, tuple) else result
         if clicked:
             state.active_plot_idx = i
@@ -91,6 +91,7 @@ def _draw_plot_list(state):
     if len(state.plots) < 8:
         if imgui.button("+ Equation", imgui.ImVec2(-1, 0)):
             state.add_plot()
+        _tip("Add another equation curve to the plot (up to 8)")
     imgui.separator()
 
 
@@ -165,6 +166,28 @@ def _draw_data_controls(state, io, slot):
     n = slot.raw_data.shape[0] if slot.raw_data is not None else 0
     imgui.text_disabled(f"{n:,} rows  |  {len(col_names)} cols")
 
+    # ── Column statistics ────────────────────────────────────────────────────
+    if slot.raw_data is not None and imgui.collapsing_header("Stats##colstats"):
+        col_idx = (slot.col_hist if slot.plot_type in
+                   (PLOT_HISTOGRAM, PLOT_KDE, PLOT_VIOLIN) else slot.col_x)
+        col_idx = min(col_idx, slot.raw_data.shape[1] - 1)
+        col_data = slot.raw_data[:, col_idx]
+        finite   = col_data[np.isfinite(col_data)]
+        if len(finite):
+            q25, q50, q75 = np.percentile(finite, [25, 50, 75])
+            rows = [
+                ("Min",    f"{float(np.min(finite)):.6g}"),
+                ("Max",    f"{float(np.max(finite)):.6g}"),
+                ("Mean",   f"{float(np.mean(finite)):.6g}"),
+                ("Std",    f"{float(np.std(finite)):.6g}"),
+                ("Median", f"{float(q50):.6g}"),
+                ("Q1/Q3",  f"{float(q25):.4g} / {float(q75):.4g}"),
+            ]
+            for lbl, val in rows:
+                imgui.text_disabled(f"{lbl:7s}")
+                imgui.same_line(60)
+                imgui.text(val)
+
     imgui.separator()
     _, state.show_axis_grid = imgui.checkbox("Axis Lines", state.show_axis_grid)
     imgui.same_line()
@@ -208,6 +231,28 @@ def _draw_2d_controls(state, io):
             if not slot.last_error:
                 state.add_to_history(expr)
 
+    if imgui.small_button("?##help2d"):
+        imgui.open_popup("##expr_help")
+    _tip("Show supported functions and syntax")
+    imgui.same_line()
+    if imgui.begin_popup("##expr_help"):
+        imgui.text_colored(imgui.ImVec4(0.2, 0.45, 0.8, 1.0), "Supported functions")
+        imgui.separator()
+        _HELP = [
+            ("Trig",        "sin cos tan asin acos atan atan2(y,x)"),
+            ("Hyp",         "sinh cosh tanh"),
+            ("Exp / Log",   "exp log log10 log2 sqrt"),
+            ("Rounding",    "abs floor ceil sign"),
+            ("Constants",   "pi E"),
+            ("Animation",   "'t' — enable Animation checkbox first"),
+            ("Examples",    "sin(x)/x   |   x**2 + 2*x   |   exp(-x**2)"),
+        ]
+        for cat, txt in _HELP:
+            imgui.text_colored(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), f"{cat}:")
+            imgui.same_line(70)
+            imgui.text(txt)
+        imgui.end_popup()
+
     if imgui.button("Plot##2d", imgui.ImVec2(-1, 0)):
         expr = slot.input_buf.strip()
         if expr:
@@ -215,6 +260,7 @@ def _draw_2d_controls(state, io):
             state.generate_math_data(expr)
             if not slot.last_error:
                 state.add_to_history(expr)
+    _tip("Evaluate and draw the expression (also triggered by Enter)")
 
     if state.equation_history and imgui.collapsing_header("Recent##hist"):
         for h_expr in state.equation_history[:12]:
@@ -227,6 +273,7 @@ def _draw_2d_controls(state, io):
     imgui.separator()
 
     _, state.anim_enabled = imgui.checkbox("Animation (use 't')", state.anim_enabled)
+    _tip("Enable time variable 't' in the expression, e.g. sin(x - t)")
     if state.anim_enabled:
         imgui.push_item_width(-1)
         ch_t, new_t = imgui.slider_float(
@@ -249,30 +296,49 @@ def _draw_2d_controls(state, io):
 
     imgui.separator()
     imgui.text("Active curve style:")
+    imgui.push_item_width(-1)
+    ch_lbl, new_lbl = _input_text(f"##slotlabel_{state.active_plot_idx}", slot.label, 64)
+    imgui.pop_item_width()
+    _tip("Custom label shown in the plot list (leave empty to auto-generate)")
+    if ch_lbl:
+        slot.label = new_lbl
     _, slot.color = imgui.color_edit3(f"Color##sc_{state.active_plot_idx}", slot.color)
     _, slot.effect_mode = imgui.combo(
         f"Effect##em_{state.active_plot_idx}", slot.effect_mode,
         ["Solid Color", "Neon Glow", "Plasma", "Electric"])
+    _tip("Visual effect applied to this curve")
     imgui.push_item_width(-1)
     _, slot.line_thickness = imgui.slider_float(
         f"##thick_{state.active_plot_idx}", slot.line_thickness, 1.0, 15.0,
         format=f"Thickness  {slot.line_thickness:.1f}")
     imgui.pop_item_width()
+    _tip("Line width in pixels")
     _, slot.connect_lines = imgui.checkbox(
         f"Connect Lines##{state.active_plot_idx}", slot.connect_lines)
+    _tip("Draw a continuous line; uncheck to show individual sample dots")
 
     imgui.separator()
     _, state.show_axis_grid = imgui.checkbox("Axis Lines", state.show_axis_grid)
+    _tip("Show the X=0 and Y=0 axis lines")
     imgui.same_line()
     _, state.show_numbers   = imgui.checkbox("Grid", state.show_numbers)
+    _tip("Show background grid lines and tick labels")
+    imgui.same_line()
+    ch_dm, state.dark_mode = imgui.checkbox("Dark", state.dark_mode)
+    _tip("Toggle dark / light UI theme")
+    if ch_dm:
+        state._dark_mode_dirty = True
 
     ch_lx, state.log_scale_x = imgui.checkbox("Log X", state.log_scale_x)
+    _tip("Switch X axis to logarithmic scale")
     imgui.same_line()
     ch_ly, state.log_scale_y = imgui.checkbox("Log Y", state.log_scale_y)
+    _tip("Switch Y axis to logarithmic scale")
     if ch_lx or ch_ly:
         state.math_data_needs_update = True
 
     changed_res, new_res = imgui.input_int("Resolution##2d", state.resolution, 1000, 10000)
+    _tip("Number of sample points computed along X\nHigher = smoother curves, slower updates")
     if changed_res:
         state.resolution = max(100, min(200_000, new_res))
         state.math_data_needs_update = True
@@ -285,6 +351,7 @@ def _draw_2d_controls(state, io):
     imgui.text(f"  Zoom {zoom:.2f}x  FPS {io.framerate:.0f}")
     if imgui.button("Fit View##fit", imgui.ImVec2(-1, 0)):
         state.zoom_to_fit_2d()
+    _tip("Auto-scale viewport to show the full curve (R)")
 
 
 # ================================================================
@@ -546,9 +613,26 @@ def draw_panel(state, plot_rect):
             state.panel_open = False
         imgui.same_line()
         imgui.text_colored(imgui.ImVec4(0.2, 0.4, 0.8, 1.0), "OpenGL Plotter")
-        imgui.text("Drag: Pan  |  Scroll: Zoom")
+        imgui.text("Drag: Pan  |  Scroll: Zoom  |  Shift+Drag: Zoom Box")
+
+        # ── Global error banner ──────────────────────────────────────────────
+        if state.last_error:
+            imgui.push_style_color(imgui.Col_.child_bg, imgui.ImVec4(0.95, 0.20, 0.20, 0.18))
+            imgui.begin_child("##errbanner", imgui.ImVec2(-1, 0), False,
+                              imgui.WindowFlags_.no_scrollbar)
+            imgui.text_colored(imgui.ImVec4(0.85, 0.10, 0.10, 1.0), "⚠ " + state.last_error[:72])
+            imgui.same_line()
+            if imgui.small_button("✕##errdismiss"):
+                state.last_error = ""
+            imgui.end_child()
+
         if imgui.small_button("Open File..."):
             state._open_file_requested = True
+        _tip("Load a CSV / TSV data file")
+        imgui.same_line()
+        if imgui.small_button("Save PNG"):
+            state._save_screenshot_requested = True
+        _tip("Export the current plot as a PNG image (Ctrl+S)")
         imgui.separator()
 
         _is_surf  = state.mode_3d and not state.mode_parametric and not state.mode_space_curve

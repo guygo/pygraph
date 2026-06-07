@@ -112,6 +112,10 @@ def _frame_update():
         state.anim_time += io.delta_time * state.anim_speed
         state.math_data_needs_update = True
 
+    if state._dark_mode_dirty:
+        state._dark_mode_dirty = False
+        _apply_style(dark=state.dark_mode)
+
     draw_panel(state, plot_rect)
     state.process_interactions(plot_rect)
 
@@ -131,24 +135,45 @@ def _frame_update():
 
     render_frame(state, plot_rect)
 
+    # Screenshot – read pixels after render so the framebuffer is fully drawn
+    if state._save_screenshot_requested:
+        state._save_screenshot_requested = False
+        state.save_screenshot()
 
-def _setup_style():
+
+def _apply_style(dark: bool = False):
     s = imgui.get_style()
-    white      = imgui.ImVec4(1.0, 1.0, 1.0, 1.0)
-    input_bg   = imgui.ImVec4(0.90, 0.90, 0.90, 1.0)
-    input_hov  = imgui.ImVec4(0.80, 0.80, 0.80, 1.0)
-    input_act  = imgui.ImVec4(0.70, 0.70, 0.70, 1.0)
-    btn        = imgui.ImVec4(0.82, 0.82, 0.82, 1.0)
-    btn_hov    = imgui.ImVec4(0.70, 0.70, 0.70, 1.0)
-    btn_act    = imgui.ImVec4(0.55, 0.55, 0.55, 1.0)
-    sep        = imgui.ImVec4(0.65, 0.65, 0.65, 1.0)
-    accent     = imgui.ImVec4(0.20, 0.45, 0.80, 1.0)
-    accent_h   = imgui.ImVec4(0.15, 0.35, 0.70, 1.0)
-    black_text = imgui.ImVec4(0.05, 0.05, 0.05, 1.0)
+    accent   = imgui.ImVec4(0.20, 0.45, 0.80, 1.0)
+    accent_h = imgui.ImVec4(0.15, 0.35, 0.70, 1.0)
 
-    s.set_color_(imgui.Col_.window_bg,          white)
-    s.set_color_(imgui.Col_.child_bg,           white)
-    s.set_color_(imgui.Col_.popup_bg,           white)
+    if dark:
+        win_bg   = imgui.ImVec4(0.13, 0.14, 0.16, 1.0)
+        input_bg = imgui.ImVec4(0.20, 0.22, 0.26, 1.0)
+        input_hov= imgui.ImVec4(0.26, 0.28, 0.34, 1.0)
+        input_act= imgui.ImVec4(0.30, 0.33, 0.40, 1.0)
+        btn      = imgui.ImVec4(0.22, 0.24, 0.28, 1.0)
+        btn_hov  = imgui.ImVec4(0.30, 0.33, 0.38, 1.0)
+        btn_act  = imgui.ImVec4(0.18, 0.20, 0.24, 1.0)
+        sep      = imgui.ImVec4(0.35, 0.37, 0.42, 1.0)
+        text     = imgui.ImVec4(0.90, 0.90, 0.92, 1.0)
+        txt_dis  = imgui.ImVec4(0.50, 0.52, 0.56, 1.0)
+        menu_bg  = imgui.ImVec4(0.10, 0.11, 0.13, 1.0)
+    else:
+        win_bg   = imgui.ImVec4(1.0,  1.0,  1.0,  1.0)
+        input_bg = imgui.ImVec4(0.90, 0.90, 0.90, 1.0)
+        input_hov= imgui.ImVec4(0.80, 0.80, 0.80, 1.0)
+        input_act= imgui.ImVec4(0.70, 0.70, 0.70, 1.0)
+        btn      = imgui.ImVec4(0.82, 0.82, 0.82, 1.0)
+        btn_hov  = imgui.ImVec4(0.70, 0.70, 0.70, 1.0)
+        btn_act  = imgui.ImVec4(0.55, 0.55, 0.55, 1.0)
+        sep      = imgui.ImVec4(0.65, 0.65, 0.65, 1.0)
+        text     = imgui.ImVec4(0.05, 0.05, 0.05, 1.0)
+        txt_dis  = imgui.ImVec4(0.50, 0.50, 0.50, 1.0)
+        menu_bg  = imgui.ImVec4(0.95, 0.95, 0.97, 1.0)
+
+    s.set_color_(imgui.Col_.window_bg,          win_bg)
+    s.set_color_(imgui.Col_.child_bg,           win_bg)
+    s.set_color_(imgui.Col_.popup_bg,           win_bg)
     s.set_color_(imgui.Col_.frame_bg,           input_bg)
     s.set_color_(imgui.Col_.frame_bg_hovered,   input_hov)
     s.set_color_(imgui.Col_.frame_bg_active,    input_act)
@@ -164,16 +189,20 @@ def _setup_style():
     s.set_color_(imgui.Col_.header_hovered,     btn_hov)
     s.set_color_(imgui.Col_.header_active,      btn_act)
     s.set_color_(imgui.Col_.separator,          sep)
-    s.set_color_(imgui.Col_.text,               black_text)
-    s.set_color_(imgui.Col_.text_disabled,      imgui.ImVec4(0.5, 0.5, 0.5, 1.0))
+    s.set_color_(imgui.Col_.text,               text)
+    s.set_color_(imgui.Col_.text_disabled,      txt_dis)
     s.set_color_(imgui.Col_.border,             sep)
-    s.set_color_(imgui.Col_.menu_bar_bg,        imgui.ImVec4(0.95, 0.95, 0.97, 1.0))
+    s.set_color_(imgui.Col_.menu_bar_bg,        menu_bg)
     s.window_rounding = 4.0
     s.frame_rounding  = 3.0
     s.grab_rounding   = 3.0
     s.item_spacing    = imgui.ImVec2(6, 5)
     s.frame_padding   = imgui.ImVec2(5, 4)
     s.window_padding  = imgui.ImVec2(8, 8)
+
+
+def _setup_style():
+    _apply_style(dark=False)
 
 
 if __name__ == "__main__":
