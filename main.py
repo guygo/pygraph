@@ -1,6 +1,4 @@
-import sys
 import traceback
-import subprocess
 import threading
 from OpenGL.GL import *
 from imgui_bundle import imgui, hello_imgui
@@ -27,27 +25,23 @@ def _guarded(fn):
 
 
 # ================================================================
-#  File dialog – runs tkinter in a subprocess so its main-thread
-#  requirement never conflicts with the OpenGL render loop, on any OS.
+#  File dialog – runs in a background thread so the render loop
+#  keeps running while the user picks a file.
 # ================================================================
 def _open_file_dialog():
     """Open a native file-picker dialog without blocking the render loop."""
-    _DIALOG = (
-        "import tkinter as tk; from tkinter import filedialog; "
-        "root=tk.Tk(); root.withdraw(); root.attributes('-topmost',True); "
-        "p=filedialog.askopenfilename("
-        "  title='Open Data File',"
-        "  filetypes=[('Data files','*.csv *.tsv *.txt'),('All files','*')]"
-        "); print(p or ''); root.destroy()"
-    )
-
     def _worker():
         try:
-            result = subprocess.run(
-                [sys.executable, "-c", _DIALOG],
-                capture_output=True, text=True, timeout=300,
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            path = filedialog.askopenfilename(
+                title="Open Data File",
+                filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*")],
             )
-            path = result.stdout.strip()
+            root.destroy()
             if path:
                 state._pending_file = path
         except Exception as e:
