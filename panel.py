@@ -99,12 +99,13 @@ def _draw_plot_list(state):
 def _draw_data_controls(state, io, slot):
     imgui.text_colored(imgui.ImVec4(0.1, 0.5, 0.85, 1.0),
                        f"Data: {slot.source_file or '(unknown)'}")
-
-    ch_t, new_t = imgui.combo("Type##dt", slot.plot_type,
+    
+    # Data-type constants are 1-based (SCATTER=1…KDE=4); combo is 0-based.
+    display_idx = max(0, slot.plot_type - 1)
+    ch_t, new_t = imgui.combo("Type##dt", display_idx,
                               ["Scatter", "Line", "Histogram", "KDE"])
     if ch_t:
-        # remap: combo shows data-only types so index 0=SCATTER, 1=LINE, etc.
-        slot.plot_type = [PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE][new_t]
+        slot.plot_type = new_t + 1   # 0→SCATTER=1, 1→LINE=2, 2→HIST=3, 3→KDE=4
         state._update_data_slot(slot)
 
     col_names = slot.col_names or [f"col{i}" for i in range(
