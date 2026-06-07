@@ -1,5 +1,6 @@
 from OpenGL.GL import *
 import numpy as np
+import ctypes
 
 
 class DynamicLinePlot:
@@ -73,4 +74,34 @@ class BackgroundQuad:
     def draw(self):
         glBindVertexArray(self.vao)
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
+        glBindVertexArray(0)
+
+
+class ColoredMesh:
+    """VAO/VBO for interleaved (x,y,r,g,b) per-vertex colored triangles."""
+    def __init__(self):
+        self.vao = glGenVertexArrays(1)
+        self.vbo = glGenBuffers(1)
+        self.vertex_count = 0
+        stride = 5 * 4  # 5 floats * 4 bytes
+        glBindVertexArray(self.vao)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, 0, None, GL_DYNAMIC_DRAW)
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(0))
+        glEnableVertexAttribArray(0)
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(8))
+        glEnableVertexAttribArray(1)
+        glBindVertexArray(0)
+
+    def update_data(self, verts_5col):
+        """verts_5col: float32 (N,5) array of [x,y,r,g,b]."""
+        self.vertex_count = len(verts_5col)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, verts_5col.nbytes, verts_5col, GL_DYNAMIC_DRAW)
+
+    def draw(self):
+        if self.vertex_count == 0:
+            return
+        glBindVertexArray(self.vao)
+        glDrawArrays(GL_TRIANGLES, 0, self.vertex_count)
         glBindVertexArray(0)

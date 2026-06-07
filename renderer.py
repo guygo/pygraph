@@ -4,7 +4,7 @@ from OpenGL.GL import *
 from imgui_bundle import imgui
 from gui import draw_axis_labels, draw_grid_lines, draw_axis_lines
 from overlay3d import draw_3d_overlay
-from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE
+from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
 
 _EFFECT_WIDTH_MULT = {1: 2.8, 2: 2.2, 3: 2.8}
 
@@ -49,7 +49,7 @@ def _set_log_uniforms(prog, state):
     glUniform1i(glGetUniformLocation(prog, "uLogY"), 1 if state.log_scale_y else 0)
 
 
-def _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H):
+def _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H, plot_rect=None):
     glEnable(GL_SCISSOR_TEST)
     glScissor(fb_px, 0, fb_pw, fb_ph)
 
@@ -133,6 +133,60 @@ def _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H):
             glUniform2f(glGetUniformLocation(prog, "uViewport"),  float(fb_pw), float(fb_ph))
             _set_log_uniforms(prog, state)
             slot.geometry.draw(GL_LINE_STRIP)
+            continue
+
+        # ── 2D Heatmap ────────────────────────────────────────────────────────
+        if pt == PLOT_HEATMAP2D:
+            if slot.heatmap_geo is None:
+                continue
+            prog = state.plot_colored_shader
+            glUseProgram(prog)
+            glUniform2f(glGetUniformLocation(prog, "uMinBounds"), state.min_x, state.min_y)
+            glUniform2f(glGetUniformLocation(prog, "uMaxBounds"), state.max_x, state.max_y)
+            glUniform1f(glGetUniformLocation(prog, "uAlpha"),     1.0)
+            slot.heatmap_geo.draw()
+            continue
+
+        # ── Violin ────────────────────────────────────────────────────────────
+        if pt == PLOT_VIOLIN:
+            if slot.hist_geo is None:
+                continue
+            # Filled shape
+            prog_f = state.plot_fill_shader
+            glUseProgram(prog_f)
+            glUniform2f(glGetUniformLocation(prog_f, "uMinBounds"), state.min_x, state.min_y)
+            glUniform2f(glGetUniformLocation(prog_f, "uMaxBounds"), state.max_x, state.max_y)
+            glUniform3f(glGetUniformLocation(prog_f, "uColor"),     *slot.color)
+            glUniform1f(glGetUniformLocation(prog_f, "uAlpha"),     0.40)
+            slot.hist_geo.draw()
+            # Upper edge line
+            if slot.geometry is not None:
+                prog = state.plot_solid_shader
+                glUseProgram(prog)
+                glUniform2f(glGetUniformLocation(prog, "uMinBounds"), state.min_x, state.min_y)
+                glUniform2f(glGetUniformLocation(prog, "uMaxBounds"), state.max_x, state.max_y)
+                glUniform3f(glGetUniformLocation(prog, "uColor"),     *slot.color)
+                glUniform1f(glGetUniformLocation(prog, "uLineWidth"), slot.line_thickness)
+                glUniform2f(glGetUniformLocation(prog, "uViewport"),  float(fb_pw), float(fb_ph))
+                _set_log_uniforms(prog, state)
+                slot.geometry.draw(GL_LINE_STRIP)
+            # Median/quartile lines (vertical lines at q25, q50, q75)
+            if getattr(slot, '_violin_quartiles', None) and plot_rect is not None:
+                q25, q50, q75 = slot._violin_quartiles
+                mx = getattr(slot, '_violin_max_kde', 0.0)
+                draw_list = imgui.get_background_draw_list()
+                col_u32 = imgui.get_color_u32(imgui.ImVec4(*slot.color, 0.9))
+                px2 = plot_rect["x"];  py2 = plot_rect["y"]
+                pw2 = plot_rect["w"];  ph2 = plot_rect["h"]
+                rx = state.max_x - state.min_x; ry = state.max_y - state.min_y
+                def _sx(xd): return px2 + pw2 * (xd - state.min_x) / rx
+                def _sy(yd): return py2 + ph2 * (1.0 - (yd - state.min_y) / ry)
+                for xq in [q25, q50, q75]:
+                    sx = _sx(xq)
+                    thick = 3.0 if xq == q50 else 1.5
+                    draw_list.add_line(imgui.ImVec2(sx, _sy(-mx * 0.85)),
+                                       imgui.ImVec2(sx, _sy( mx * 0.85)),
+                                       col_u32, thick)
             continue
 
         # ── Equation (solid or effect) ────────────────────────────────────────
@@ -236,6 +290,6 @@ def render_frame(state, plot_rect):
     glLineWidth(1.0)
 
     if not state.mode_3d:
-        _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H)
+        _render_2d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H, plot_rect)
     else:
         _render_3d(state, fb_px, fb_py, fb_pw, fb_ph, fb_W, fb_H, px, py, pw, ph)

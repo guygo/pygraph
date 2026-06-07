@@ -1,7 +1,8 @@
 import numpy as np
 from imgui_bundle import imgui
 from plot_slot import (PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA,
-                       PLOT_HISTOGRAM, PLOT_KDE, PLOT_TYPE_NAMES)
+                       PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN,
+                       PLOT_TYPE_NAMES)
 
 _INPUT_DARK = imgui.ImVec4(0.08, 0.12, 0.28, 1.0)
 _INPUT_TEXT = imgui.ImVec4(1.00, 1.00, 1.00, 1.0)
@@ -77,7 +78,7 @@ def _draw_plot_list(state):
         if slot.plot_type == PLOT_EQUATION:
             lbl = slot.expr[:22] + ("..." if len(slot.expr) > 22 else "") if slot.expr else "(empty)"
         else:
-            type_tag = ["", "scat", "line", "hist", "kde"][slot.plot_type]
+            type_tag = ["", "scat", "line", "hist", "kde", "heat", "viol"][slot.plot_type]
             lbl = f"{type_tag}:{slot.source_file[:18]}"
 
         result = imgui.selectable(f"{lbl}##sel{i}", is_active)
@@ -100,18 +101,18 @@ def _draw_data_controls(state, io, slot):
     imgui.text_colored(imgui.ImVec4(0.1, 0.5, 0.85, 1.0),
                        f"Data: {slot.source_file or '(unknown)'}")
     
-    # Data-type constants are 1-based (SCATTER=1…KDE=4); combo is 0-based.
+    # Data-type constants are 1-based (SCATTER=1…VIOLIN=6); combo is 0-based.
     display_idx = max(0, slot.plot_type - 1)
     ch_t, new_t = imgui.combo("Type##dt", display_idx,
-                              ["Scatter", "Line", "Histogram", "KDE"])
+                              ["Scatter", "Line", "Histogram", "KDE", "Heatmap", "Violin"])
     if ch_t:
-        slot.plot_type = new_t + 1   # 0→SCATTER=1, 1→LINE=2, 2→HIST=3, 3→KDE=4
+        slot.plot_type = new_t + 1   # 0→SCATTER=1, …, 4→HEATMAP2D=5, 5→VIOLIN=6
         state._update_data_slot(slot)
 
     col_names = slot.col_names or [f"col{i}" for i in range(
         slot.raw_data.shape[1] if slot.raw_data is not None else 1)]
 
-    if slot.plot_type in (PLOT_SCATTER, PLOT_LINE_DATA):
+    if slot.plot_type in (PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HEATMAP2D):
         imgui.push_item_width(-1)
         ch_x, new_x = imgui.combo("X##cx", slot.col_x, col_names)
         if ch_x:
@@ -132,7 +133,7 @@ def _draw_data_controls(state, io, slot):
         else:
             _, slot.connect_lines = imgui.checkbox("Connect Lines##dl", slot.connect_lines)
 
-    else:  # HISTOGRAM or KDE
+    else:  # HISTOGRAM, KDE, or VIOLIN
         imgui.push_item_width(-1)
         ch_c, new_c = imgui.combo("Column##dhc", slot.col_hist, col_names)
         if ch_c:

@@ -6,8 +6,10 @@ PLOT_SCATTER   = 1   # x,y columns from file (dots)
 PLOT_LINE_DATA = 2   # x,y columns from file (connected)
 PLOT_HISTOGRAM = 3   # single column, binned bars
 PLOT_KDE       = 4   # kernel density estimate (smooth curve)
+PLOT_HEATMAP2D = 5   # 2-D binned density (heatmap)
+PLOT_VIOLIN    = 6   # mirrored KDE (violin)
 
-PLOT_TYPE_NAMES = ["Equation", "Scatter", "Line", "Histogram", "KDE"]
+PLOT_TYPE_NAMES = ["Equation", "Scatter", "Line", "Histogram", "KDE", "Heatmap", "Violin"]
 
 
 @dataclass
@@ -31,7 +33,10 @@ class PlotSlot:
     last_error: str = ""
     geometry: object = None       # DynamicLinePlot (equation / scatter / line / KDE)
     hist_geo: object = None       # HistogramPlot (histogram only)
+    heatmap_geo: object = None    # ColoredMesh (heatmap)
     _sampled_y: object = None     # for zoom-to-fit
+    _violin_quartiles: object = None
+    _violin_max_kde: float = 0.0
 
     # ── data mode ─────────────────────────────────────────────────────────────
     plot_type: int = PLOT_EQUATION

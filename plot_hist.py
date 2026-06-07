@@ -50,6 +50,28 @@ class HistogramPlot:
         glBindBuffer(GL_ARRAY_BUFFER, self._vbo)
         glBufferData(GL_ARRAY_BUFFER, verts.nbytes, verts, GL_DYNAMIC_DRAW)
 
+    def update_violin_fill(self, x_arr, y_arr):
+        """Full violin shape (both mirrored halves) as GL_TRIANGLES."""
+        n = len(x_arr)
+        if n < 2:
+            self._vertex_count = 0
+            return
+        verts = []
+        for i in range(n - 1):
+            xl, xr = float(x_arr[i]), float(x_arr[i + 1])
+            yu, yv = float(y_arr[i]), float(y_arr[i + 1])
+            # upper half
+            verts += [xl, 0.0, xr, 0.0, xl, yu,
+                      xr, 0.0, xr, yv,  xl, yu]
+            # lower half (mirror)
+            verts += [xl, 0.0, xr, 0.0, xl, -yu,
+                      xr, 0.0, xr, -yv, xl, -yu]
+        v = np.array(verts, dtype=np.float32)
+        self._vertex_count = len(v) // 2
+        self._draw_mode = GL_TRIANGLES
+        glBindBuffer(GL_ARRAY_BUFFER, self._vbo)
+        glBufferData(GL_ARRAY_BUFFER, v.nbytes, v, GL_DYNAMIC_DRAW)
+
     def draw(self):
         if self._vertex_count == 0:
             return

@@ -5,7 +5,7 @@ import sympy as sp
 from OpenGL.GL import *
 import numpy as np
 from util import parse_to_numpy, default_expr, default_expr_3d
-from plot import DynamicLinePlot, GridGeometry, BackgroundQuad
+from plot import DynamicLinePlot, GridGeometry, BackgroundQuad, ColoredMesh
 from plot3d import SurfacePlot3D
 from plot3d_parametric import ParametricSurfacePlot
 from plot3d_curve import SpaceCurve3D
@@ -13,7 +13,7 @@ from plot_slot import PlotSlot
 import time
 from shaders import *
 from shaders3d import *
-from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE
+from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
 from OpenGL.GL.shaders import compileProgram, compileShader
 from imgui_bundle import imgui
 
@@ -177,8 +177,9 @@ class AppState:
         self._menubar_h: float = 0.0
         self._pending_file: str = ""
         self._open_file_requested: bool = False
-        self.plot_fill_shader  = None
-        self.plot_point_shader = None
+        self.plot_fill_shader    = None
+        self.plot_point_shader   = None
+        self.plot_colored_shader = None
 
     # ================================================================
     #  OpenGL init
@@ -220,6 +221,11 @@ class AppState:
         self.plot_point_shader = compileProgram(
             compileShader(POINT_VERTEX_SHADER,   GL_VERTEX_SHADER),
             compileShader(POINT_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
+        )
+        from shaders import COLORED_VERTEX_SHADER, COLORED_FRAGMENT_SHADER
+        self.plot_colored_shader = compileProgram(
+            compileShader(COLORED_VERTEX_SHADER,   GL_VERTEX_SHADER),
+            compileShader(COLORED_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
         )
         glEnable(GL_PROGRAM_POINT_SIZE)
 
@@ -487,6 +493,7 @@ class AppState:
             color=list(self._SLOT_COLORS[idx % len(self._SLOT_COLORS)]),
             geometry=DynamicLinePlot(),
             hist_geo=HistogramPlot(),
+            heatmap_geo=ColoredMesh(),
             plot_type=PLOT_SCATTER,
             raw_data=data,
             col_names=col_names,
@@ -548,6 +555,83 @@ class AppState:
             self.max_x = float(hi) + pad_x
             self.min_y = 0.0
             self.max_y = float(kde.max()) * 1.2
+
+        elif slot.plot_type == PLOT_HEATMAP2D:
+            cx = min(slot.col_x, n_cols - 1)
+            cy = min(slot.col_y, n_cols - 1)
+            x  = data[:, cx].astype(float)
+            y  = data[:, cy].astype(float)
+            mask = np.isfinite(x) & np.isfinite(y)
+            x, y = x[mask], y[mask]
+            if len(x) < 4:
+                return
+            bins = max(10, min(80, slot.hist_bins))
+            H, xe, ye = np.histogram2d(x, y, bins=bins)
+            mx = H.max()
+            if mx == 0:
+                return
+            t = (H / mx).astype(np.float32)   # normalized density
+
+            # Viridis colormap (5 control points)
+            cp_r = np.array([0.267, 0.190, 0.128, 0.341, 0.993], dtype=np.float32)
+            cp_g = np.array([0.005, 0.284, 0.563, 0.787, 0.906], dtype=np.float32)
+            cp_b = np.array([0.329, 0.657, 0.551, 0.195, 0.144], dtype=np.float32)
+            idx  = np.clip(t * 4.0, 0.0, 3.9999)
+            lo   = idx.astype(int);  hi = lo + 1
+            frac = (idx - lo).astype(np.float32)
+            cr = cp_r[lo] + frac * (cp_r[hi] - cp_r[lo])
+            cg = cp_g[lo] + frac * (cp_g[hi] - cp_g[lo])
+            cb = cp_b[lo] + frac * (cp_b[hi] - cp_b[lo])
+
+            verts = []
+            for i in range(bins):
+                for j in range(bins):
+                    if H[i, j] == 0:
+                        continue
+                    xl, xr = float(xe[i]), float(xe[i + 1])
+                    yl, yr = float(ye[j]), float(ye[j + 1])
+                    r, g, b = float(cr[i, j]), float(cg[i, j]), float(cb[i, j])
+                    verts += [xl, yl, r, g, b,  xr, yl, r, g, b,  xl, yr, r, g, b,
+                              xr, yl, r, g, b,  xr, yr, r, g, b,  xl, yr, r, g, b]
+
+            if not verts:
+                return
+            v = np.array(verts, dtype=np.float32).reshape(-1, 5)
+            slot.heatmap_geo.update_data(v)
+            pad_x = (x.max() - x.min()) * 0.03
+            pad_y = (y.max() - y.min()) * 0.03
+            self.min_x = float(x.min()) - pad_x
+            self.max_x = float(x.max()) + pad_x
+            self.min_y = float(y.min()) - pad_y
+            self.max_y = float(y.max()) + pad_y
+
+        elif slot.plot_type == PLOT_VIOLIN:
+            col    = min(slot.col_hist, n_cols - 1)
+            values = data[:, col]
+            values = values[np.isfinite(values)]
+            if len(values) < 2:
+                return
+            h  = 1.06 * values.std() * len(values) ** (-0.2)
+            h  = max(h, 1e-9)
+            lo_v = values.min() - 3 * h
+            hi_v = values.max() + 3 * h
+            xv = np.linspace(lo_v, hi_v, 300, dtype=np.float32)
+            diff = (xv[:, None] - values[None, :]) / h
+            kde  = (np.exp(-0.5 * diff ** 2).sum(axis=1)
+                    / (len(values) * h * np.sqrt(2 * np.pi))).astype(np.float32)
+            # Store violin fill in hist_geo, KDE curve in geometry
+            slot.hist_geo.update_violin_fill(xv, kde)
+            slot.geometry.update_data(xv, kde)    # upper edge line
+            pad_x = (hi_v - lo_v) * 0.04
+            self.min_x = float(lo_v) - pad_x
+            self.max_x = float(hi_v) + pad_x
+            mx_kde = float(kde.max())
+            self.min_y = -mx_kde * 1.3
+            self.max_y =  mx_kde * 1.3
+            # quartiles as reference lines (store on slot for renderer)
+            q25, q50, q75 = np.percentile(values, [25, 50, 75])
+            slot._violin_quartiles = (float(q25), float(q50), float(q75))
+            slot._violin_max_kde = mx_kde
 
         else:  # SCATTER or LINE_DATA
             cx = min(slot.col_x, n_cols - 1)
@@ -632,14 +716,15 @@ class AppState:
     #  Grid spacing
     # ================================================================
     def calculate_grid_spacing(self):
-        range_x  = self.max_x - self.min_x
-        exponent = np.floor(np.log10(max(abs(range_x), 1e-10)))
-        base     = 10 ** exponent
-        ratio    = range_x / base
-        if   ratio < 2.0: spacing_x = base * 0.2
-        elif ratio < 5.0: spacing_x = base * 0.5
-        else:             spacing_x = base * 1.0
-        return spacing_x, spacing_x
+        def _nice_spacing(range_val):
+            rng = max(abs(range_val), 1e-10)
+            exp = np.floor(np.log10(rng))
+            base = 10 ** exp
+            ratio = rng / base
+            if   ratio < 2.0: return base * 0.2
+            elif ratio < 5.0: return base * 0.5
+            else:             return base * 1.0
+        return _nice_spacing(self.max_x - self.min_x), _nice_spacing(self.max_y - self.min_y)
 
     # ================================================================
     #  Resize

@@ -248,3 +248,25 @@ void main() {
     if (alpha < 0.01) discard;
     FragColor = vec4(uColor, alpha);
 }"""
+
+# ── Colored-vertex shader (heatmap) ──────────────────────────────────────────
+
+COLORED_VERTEX_SHADER = """#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec3 aColor;
+uniform vec2 uMinBounds;
+uniform vec2 uMaxBounds;
+out vec3 vColor;
+void main() {
+    vec2 norm = (aPos - uMinBounds) / (uMaxBounds - uMinBounds);
+    gl_Position = vec4(norm * 2.0 - 1.0, 0.0, 1.0);
+    vColor = aColor;
+}"""
+
+COLORED_FRAGMENT_SHADER = """#version 330 core
+in  vec3 vColor;
+uniform float uAlpha;
+out vec4 FragColor;
+void main() {
+    FragColor = vec4(vColor, uAlpha);
+}"""
