@@ -508,6 +508,9 @@ class AppState:
         n_cols = data.shape[1]
 
         if slot.plot_type == PLOT_HISTOGRAM:
+            # Reset alpha if still at the equation-thickness default
+            if slot.line_thickness > 1.0:
+                slot.line_thickness = 0.85
             col    = min(slot.col_hist, n_cols - 1)
             values = data[:, col]
             values = values[np.isfinite(values)]
@@ -517,8 +520,8 @@ class AppState:
             slot.hist_geo.update_data(edges, counts.astype(np.float32))
             slot._sampled_y = counts.astype(np.float32)
             max_count = float(counts.max()) if len(counts) else 1.0
-            self.min_x = float(edges[0])
-            self.max_x = float(edges[-1])
+            self.min_x = float(edges[0]) - (float(edges[-1]) - float(edges[0])) * 0.02
+            self.max_x = float(edges[-1]) + (float(edges[-1]) - float(edges[0])) * 0.02
             self.min_y = 0.0
             self.max_y = max_count * 1.15
 

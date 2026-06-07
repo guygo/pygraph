@@ -145,15 +145,20 @@ def _draw_data_controls(state, io, slot):
             if ch_b:
                 slot.hist_bins = max(2, min(500, new_b))
                 state._update_data_slot(slot)
+            # Ensure alpha is in valid range (line_thickness defaults to 4.0 for equations)
+            slot.line_thickness = max(0.1, min(1.0, slot.line_thickness))
 
     imgui.separator()
     _, slot.color = imgui.color_edit3(f"Color##dc_{state.active_plot_idx}", slot.color)
 
     if slot.plot_type == PLOT_HISTOGRAM:
         imgui.push_item_width(-1)
-        _, slot.line_thickness = imgui.slider_float(
-            "##baro", slot.line_thickness, 0.3, 1.0,
-            format=f"Fill alpha  {slot.line_thickness:.2f}")
+        cur_alpha = max(0.1, min(1.0, slot.line_thickness))
+        ch_a, new_a = imgui.slider_float(
+            "##baro", cur_alpha, 0.1, 1.0,
+            format=f"Fill alpha  {cur_alpha:.2f}")
+        if ch_a:
+            slot.line_thickness = new_a
         imgui.pop_item_width()
 
     n = slot.raw_data.shape[0] if slot.raw_data is not None else 0
