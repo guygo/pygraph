@@ -107,7 +107,7 @@ def _draw_data_controls(state, io, slot):
                               ["Scatter", "Line", "Histogram", "KDE", "Heatmap", "Violin"])
     if ch_t:
         slot.plot_type = new_t + 1   # 0→SCATTER=1, …, 4→HEATMAP2D=5, 5→VIOLIN=6
-        state._update_data_slot(slot)
+        state._update_data_slot(slot, fit_view=False)
 
     col_names = slot.col_names or [f"col{i}" for i in range(
         slot.raw_data.shape[1] if slot.raw_data is not None else 1)]
@@ -117,11 +117,11 @@ def _draw_data_controls(state, io, slot):
         ch_x, new_x = imgui.combo("X##cx", slot.col_x, col_names)
         if ch_x:
             slot.col_x = new_x
-            state._update_data_slot(slot)
+            state._update_data_slot(slot, fit_view=False)
         ch_y, new_y = imgui.combo("Y##cy", slot.col_y, col_names)
         if ch_y:
             slot.col_y = new_y
-            state._update_data_slot(slot)
+            state._update_data_slot(slot, fit_view=False)
         imgui.pop_item_width()
 
         if slot.plot_type == PLOT_SCATTER:
@@ -138,14 +138,14 @@ def _draw_data_controls(state, io, slot):
         ch_c, new_c = imgui.combo("Column##dhc", slot.col_hist, col_names)
         if ch_c:
             slot.col_hist = new_c
-            state._update_data_slot(slot)
+            state._update_data_slot(slot, fit_view=False)
         imgui.pop_item_width()
 
         if slot.plot_type == PLOT_HISTOGRAM:
             ch_b, new_b = imgui.input_int("Bins##db", slot.hist_bins, 5, 20)
             if ch_b:
                 slot.hist_bins = max(2, min(500, new_b))
-                state._update_data_slot(slot)
+                state._update_data_slot(slot, fit_view=False)
             # Ensure alpha is in valid range (line_thickness defaults to 4.0 for equations)
             slot.line_thickness = max(0.1, min(1.0, slot.line_thickness))
 

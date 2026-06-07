@@ -469,6 +469,11 @@ class AppState:
             return
         self.plots.pop(idx)
         self.active_plot_idx = max(0, min(self.active_plot_idx, len(self.plots) - 1))
+        # If only equation slots remain, restore a sensible default view
+        if all(p.plot_type == PLOT_EQUATION for p in self.plots):
+            self.min_x, self.max_x = -10.0, 10.0
+            self.min_y, self.max_y = -5.0,   5.0
+            self.math_data_needs_update = True
 
     # ================================================================
     #  Data file loading
@@ -507,12 +512,16 @@ class AppState:
         self._update_data_slot(slot)
         self.last_error = ""
 
-    def _update_data_slot(self, slot):
-        """Recompute geometry for a data slot after column/type/bins change."""
+    def _update_data_slot(self, slot, fit_view=True):
+        """Recompute geometry for a data slot.
+        fit_view: apply computed data bounds to the shared viewport.
+                  Pass False when changing type/column/bins so the user's zoom is preserved.
+        """
         if slot.raw_data is None:
             return
         data   = slot.raw_data
         n_cols = data.shape[1]
+        vx0 = vx1 = vy0 = vy1 = None   # computed bounds (set per branch)
 
         if slot.plot_type == PLOT_HISTOGRAM:
             # Reset alpha if still at the equation-thickness default
@@ -527,10 +536,11 @@ class AppState:
             slot.hist_geo.update_data(edges, counts.astype(np.float32))
             slot._sampled_y = counts.astype(np.float32)
             max_count = float(counts.max()) if len(counts) else 1.0
-            self.min_x = float(edges[0]) - (float(edges[-1]) - float(edges[0])) * 0.02
-            self.max_x = float(edges[-1]) + (float(edges[-1]) - float(edges[0])) * 0.02
-            self.min_y = 0.0
-            self.max_y = max_count * 1.15
+            span = float(edges[-1]) - float(edges[0])
+            vx0 = float(edges[0])  - span * 0.02
+            vx1 = float(edges[-1]) + span * 0.02
+            vy0 = 0.0
+            vy1 = max_count * 1.15
 
         elif slot.plot_type == PLOT_KDE:
             col    = min(slot.col_hist, n_cols - 1)
@@ -551,10 +561,10 @@ class AppState:
             slot.hist_geo.update_fill_strip(x, kde)
             slot._sampled_y = kde
             pad_x = (hi - lo) * 0.05
-            self.min_x = float(lo) - pad_x
-            self.max_x = float(hi) + pad_x
-            self.min_y = 0.0
-            self.max_y = float(kde.max()) * 1.2
+            vx0 = float(lo) - pad_x
+            vx1 = float(hi) + pad_x
+            vy0 = 0.0
+            vy1 = float(kde.max()) * 1.2
 
         elif slot.plot_type == PLOT_HEATMAP2D:
             cx = min(slot.col_x, n_cols - 1)
@@ -600,10 +610,10 @@ class AppState:
             slot.heatmap_geo.update_data(v)
             pad_x = (x.max() - x.min()) * 0.03
             pad_y = (y.max() - y.min()) * 0.03
-            self.min_x = float(x.min()) - pad_x
-            self.max_x = float(x.max()) + pad_x
-            self.min_y = float(y.min()) - pad_y
-            self.max_y = float(y.max()) + pad_y
+            vx0 = float(x.min()) - pad_x
+            vx1 = float(x.max()) + pad_x
+            vy0 = float(y.min()) - pad_y
+            vy1 = float(y.max()) + pad_y
 
         elif slot.plot_type == PLOT_VIOLIN:
             col    = min(slot.col_hist, n_cols - 1)
@@ -619,15 +629,14 @@ class AppState:
             diff = (xv[:, None] - values[None, :]) / h
             kde  = (np.exp(-0.5 * diff ** 2).sum(axis=1)
                     / (len(values) * h * np.sqrt(2 * np.pi))).astype(np.float32)
-            # Store violin fill in hist_geo, KDE curve in geometry
             slot.hist_geo.update_violin_fill(xv, kde)
             slot.geometry.update_data(xv, kde)    # upper edge line
             pad_x = (hi_v - lo_v) * 0.04
-            self.min_x = float(lo_v) - pad_x
-            self.max_x = float(hi_v) + pad_x
+            vx0 = float(lo_v) - pad_x
+            vx1 = float(hi_v) + pad_x
             mx_kde = float(kde.max())
-            self.min_y = -mx_kde * 1.3
-            self.max_y =  mx_kde * 1.3
+            vy0 = -mx_kde * 1.3
+            vy1 =  mx_kde * 1.3
             # quartiles as reference lines (store on slot for renderer)
             q25, q50, q75 = np.percentile(values, [25, 50, 75])
             slot._violin_quartiles = (float(q25), float(q50), float(q75))
@@ -648,10 +657,16 @@ class AppState:
             ry = y.max() - y.min()
             pad_x = rx * 0.05 + 0.5
             pad_y = ry * 0.05 + 0.5
-            self.min_x = float(x.min()) - pad_x
-            self.max_x = float(x.max()) + pad_x
-            self.min_y = float(y.min()) - pad_y
-            self.max_y = float(y.max()) + pad_y
+            vx0 = float(x.min()) - pad_x
+            vx1 = float(x.max()) + pad_x
+            vy0 = float(y.min()) - pad_y
+            vy1 = float(y.max()) + pad_y
+
+        if vx0 is not None:
+            slot._data_view = (vx0, vx1, vy0, vy1)
+            if fit_view:
+                self.min_x, self.max_x = vx0, vx1
+                self.min_y, self.max_y = vy0, vy1
 
     # ================================================================
     #  Zoom-to-fit (2D, uses sampled y from all visible slots)
