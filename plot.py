@@ -1,5 +1,7 @@
 from OpenGL.GL import *
 import numpy as np
+
+
 class DynamicLinePlot:
     def __init__(self):
         self.vao = glGenVertexArrays(1)
@@ -25,6 +27,7 @@ class DynamicLinePlot:
         glDrawArrays(draw_mode, 0, self.point_count)
         glBindVertexArray(0)
 
+
 class GridGeometry:
     def __init__(self):
         self.vao = glGenVertexArrays(1)
@@ -46,6 +49,26 @@ class GridGeometry:
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertices.nbytes, vertices)
         glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+    def draw(self):
+        glBindVertexArray(self.vao)
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
+        glBindVertexArray(0)
+
+
+class BackgroundQuad:
+    """Full-viewport clip-space quad for gradient backgrounds."""
+
+    def __init__(self):
+        verts = np.array([-1, -1, 1, -1, -1, 1, 1, 1], dtype=np.float32)
+        self.vao = glGenVertexArrays(1)
+        self.vbo = glGenBuffers(1)
+        glBindVertexArray(self.vao)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, verts.nbytes, verts, GL_STATIC_DRAW)
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 8, None)
+        glEnableVertexAttribArray(0)
+        glBindVertexArray(0)
 
     def draw(self):
         glBindVertexArray(self.vao)

@@ -21,8 +21,8 @@ def _project(pt, MVP, viewport):
     px, py, pw, ph = viewport
     sx = px + (ndc[0] + 1.0) * 0.5 * pw
     sy = py + (1.0 - (ndc[1] + 1.0) * 0.5) * ph
-    # Cull if behind camera
-    if ndc[2] > 1.0:
+    # Cull if outside depth range (behind near or far plane)
+    if ndc[2] > 1.0 or ndc[2] < -1.0:
         return None
     return sx, sy
 
@@ -31,6 +31,7 @@ def draw_3d_overlay(MVP, viewport, x_range, y_range, z_range,
                     grid_color=(0.65, 0.65, 0.65, 0.5),
                     axis_color=(0.25, 0.25, 0.25, 1.0),
                     box_color=(0.5, 0.5, 0.5, 0.6),
+                    label_color=(0.15, 0.15, 0.15, 1.0),
                     show_grid=True, show_box=True, show_labels=True,
                     large_font=None):
     """
@@ -47,7 +48,7 @@ def draw_3d_overlay(MVP, viewport, x_range, y_range, z_range,
     gc  = imgui.get_color_u32(imgui.ImVec4(*grid_color))
     ac  = imgui.get_color_u32(imgui.ImVec4(*axis_color))
     bc  = imgui.get_color_u32(imgui.ImVec4(*box_color))
-    tc  = imgui.get_color_u32(imgui.ImVec4(0.15, 0.15, 0.15, 1.0))
+    tc  = imgui.get_color_u32(imgui.ImVec4(*label_color))
 
     def proj(pt):
         return _project(pt, MVP, viewport)
