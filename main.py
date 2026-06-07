@@ -1,3 +1,4 @@
+import sys
 import traceback
 import subprocess
 import threading
@@ -26,26 +27,70 @@ def _guarded(fn):
 
 
 # ================================================================
-#  File dialog  (osascript avoids tkinter/OpenGL event-loop clash)
+#  File dialog (native per-platform, runs in a background thread
+#  so the OpenGL render loop keeps running while the dialog is open)
 # ================================================================
 def _open_file_dialog():
-    """Launch native macOS file dialog in a background thread so the render loop keeps running."""
+    """Open a native file-picker dialog without blocking the render loop."""
     def _worker():
+        path = ""
         try:
-            result = subprocess.run(
-                ['osascript', '-e',
-                 'POSIX path of (choose file with prompt "Open Data File")'],
-                capture_output=True, text=True, timeout=300,
-            )
-            if result.returncode == 0:
-                path = result.stdout.strip()
-                if path:
-                    state._pending_file = path
-            # returncode 1 = user cancelled – ignore
-            elif result.returncode != 1:
-                state.last_error = f"Dialog error: {result.stderr.strip()}"
+            if sys.platform == "darwin":
+                result = subprocess.run(
+                    ["osascript", "-e",
+                     'POSIX path of (choose file with prompt "Open Data File")'],
+                    capture_output=True, text=True, timeout=300,
+                )
+                if result.returncode == 0:
+                    path = result.stdout.strip()
+                elif result.returncode != 1:
+                    state.last_error = f"Dialog error: {result.stderr.strip()}"
+
+            elif sys.platform == "win32":
+                ps_script = (
+                    "Add-Type -AssemblyName System.Windows.Forms;"
+                    "$d = New-Object System.Windows.Forms.OpenFileDialog;"
+                    "$d.Filter = 'Data files (*.csv;*.tsv;*.txt)|*.csv;*.tsv;*.txt|All files (*.*)|*.*';"
+                    "$d.Title = 'Open Data File';"
+                    "if ($d.ShowDialog() -eq 'OK') { $d.FileName }"
+                )
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_script],
+                    capture_output=True, text=True, timeout=300,
+                )
+                if result.returncode == 0:
+                    path = result.stdout.strip()
+
+            else:
+                # Linux – try zenity, then kdialog, then tkinter as last resort
+                for cmd in (
+                    ["zenity", "--file-selection", "--title=Open Data File"],
+                    ["kdialog", "--getopenfilename", ".", "*.csv *.tsv *.txt"],
+                ):
+                    try:
+                        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                        if result.returncode == 0:
+                            path = result.stdout.strip()
+                            break
+                    except FileNotFoundError:
+                        continue
+                else:
+                    import tkinter as tk
+                    from tkinter import filedialog
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.attributes("-topmost", True)
+                    path = filedialog.askopenfilename(
+                        title="Open Data File",
+                        filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*")],
+                    )
+                    root.destroy()
+
         except Exception as e:
             state.last_error = f"File dialog error: {e}"
+
+        if path:
+            state._pending_file = path
 
     threading.Thread(target=_worker, daemon=True).start()
 
