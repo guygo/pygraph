@@ -74,15 +74,16 @@ def draw_axis_labels(state):
                     draw_list.add_text(imgui.ImVec2(_y_label_x(lbl), sy - 10),
                                        text_color, lbl)
     else:
-        val = np.floor(state.min_y / spacing_y) * spacing_y
-        while val <= state.max_y + spacing_y:
-            if abs(val) > spacing_y * 0.01:   # skip y≈0; origin label handles it
+        i0 = math.floor(state.min_y / spacing_y)
+        i1 = math.ceil(state.max_y  / spacing_y) + 1
+        for i in range(i0, i1):
+            val = i * spacing_y   # integer × spacing: no accumulation error
+            if abs(val) > spacing_y * 0.01:
                 sx, sy = data_to_screen(state, 0.0, val)
                 if py - 10 < sy < py + ph + 10:
                     lbl = format_label(val)
                     draw_list.add_text(imgui.ImVec2(_y_label_x(lbl), sy - 10),
                                        text_color, lbl)
-            val += spacing_y
 
     if state.min_y <= 0.0 <= state.max_y:
         _, screen_y_origin = data_to_screen(state, 0.0, 0.0)
@@ -104,20 +105,20 @@ def draw_axis_labels(state):
                     draw_list.add_text(imgui.ImVec2(sx - 10, screen_y_origin + 4),
                                        text_color, lbl)
     else:
-        val = np.floor(state.min_x / spacing_x) * spacing_x
-        while val <= state.max_x + spacing_x:
-            if abs(val) > spacing_x * 0.01:   # skip x≈0; origin label handles it
+        i0 = math.floor(state.min_x / spacing_x)
+        i1 = math.ceil(state.max_x  / spacing_x) + 1
+        for i in range(i0, i1):
+            val = i * spacing_x   # integer × spacing: no accumulation error
+            if abs(val) > spacing_x * 0.01:
                 sx, _ = data_to_screen(state, val, 0.0)
                 if px - 10 < sx < px + pw + 10:
                     lbl = format_label(val)
                     tw = imgui.calc_text_size(lbl).x
-                    # Centre label on tick; clamp so it never clips at either edge
                     tx = sx - tw / 2
                     tx = max(tx, px + 2)
                     tx = min(tx, px + pw - tw - 2)
                     draw_list.add_text(imgui.ImVec2(tx, screen_y_origin + 4),
                                        text_color, lbl)
-            val += spacing_x
 
     if (state.min_x <= 0.0 <= state.max_x and state.min_y <= 0.0 <= state.max_y
             and not state.log_scale_x and not state.log_scale_y):
@@ -159,19 +160,21 @@ def draw_grid_lines(state):
     px = plot_rect["x"];  py = plot_rect["y"]
     pw = plot_rect["w"];  ph = plot_rect["h"]
 
-    val = np.floor(state.min_x / spacing_x) * spacing_x
-    while val <= state.max_x + spacing_x:
+    i0 = math.floor(state.min_x / spacing_x)
+    i1 = math.ceil(state.max_x  / spacing_x) + 1
+    for i in range(i0, i1):
+        val = i * spacing_x
         sx, _ = data_to_screen(state, val, 0.0)
         draw_list.add_line(imgui.ImVec2(sx, py), imgui.ImVec2(sx, py + ph),
                            grid_color, 1.0)
-        val += spacing_x
 
-    val = np.floor(state.min_y / spacing_y) * spacing_y
-    while val <= state.max_y + spacing_y:
+    i0 = math.floor(state.min_y / spacing_y)
+    i1 = math.ceil(state.max_y  / spacing_y) + 1
+    for i in range(i0, i1):
+        val = i * spacing_y
         _, sy = data_to_screen(state, 0.0, val)
         draw_list.add_line(imgui.ImVec2(px, sy), imgui.ImVec2(px + pw, sy),
                            grid_color, 1.0)
-        val += spacing_y
 
 
 def draw_pinned_points(state):
