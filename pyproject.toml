@@ -1,11 +1,13 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "pygraph"
-version = "0.1.0"
+name = "pygraph-plotter"
+version = "0.2.0"
 description = "OpenGL-based interactive math function plotter"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "PyOpenGL>=3.1.7",

@@ -1,3 +1,4 @@
+import sys
 import traceback
 import threading
 from OpenGL.GL import *
@@ -78,6 +79,14 @@ def _on_init():
     load_session(state)
     state.load_history()
 
+    # CLI expression overrides session restore
+    cli_expr = getattr(state, "_cli_expr", None)
+    if cli_expr:
+        active = state.plots[state.active_plot_idx]
+        active.expr = cli_expr
+        active.input_buf = cli_expr
+        state.math_data_needs_update = True
+
     io = imgui.get_io()
     io.config_input_text_cursor_blink = False
 
@@ -135,10 +144,14 @@ def _frame_update():
 
     render_frame(state, plot_rect)
 
-    # Screenshot – read pixels after render so the framebuffer is fully drawn
+    # Screenshot / clipboard – read pixels after render so framebuffer is fully drawn
     if state._save_screenshot_requested:
         state._save_screenshot_requested = False
         state.save_screenshot()
+
+    if state._copy_clipboard_requested:
+        state._copy_clipboard_requested = False
+        state.copy_to_clipboard()
 
 
 def _apply_style(dark: bool = False):
@@ -206,6 +219,11 @@ def _setup_style():
 
 
 def main():
+    # Parse optional CLI expression: pygraph "sin(x)"
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if args:
+        state._cli_expr = args[0]
+
     params = hello_imgui.RunnerParams()
     params.app_window_params.window_title = "PyGraph"
     params.app_window_params.window_geometry.size = (1280, 720)

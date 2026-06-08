@@ -633,6 +633,14 @@ def draw_panel(state, plot_rect):
         if imgui.small_button("Save PNG"):
             state._save_screenshot_requested = True
         _tip("Export the current plot as a PNG image (Ctrl+S)")
+        imgui.same_line()
+        if imgui.small_button("Copy"):
+            state._copy_clipboard_requested = True
+        _tip("Copy the plot image to the clipboard")
+        imgui.same_line()
+        if imgui.small_button("?"):
+            state._show_help_popup = True
+        _tip("Keyboard shortcuts (Shift+/)")
         imgui.separator()
 
         _is_surf  = state.mode_3d and not state.mode_parametric and not state.mode_space_curve
@@ -661,6 +669,43 @@ def draw_panel(state, plot_rect):
             _draw_space_curve_controls(state, io)
 
     imgui.end()
+
+    # ── Keyboard shortcut help popup ──────────────────────────────────────────
+    if state._show_help_popup:
+        imgui.open_popup("Keyboard Shortcuts##help")
+        state._show_help_popup = False
+
+    center = imgui.get_main_viewport().get_center()
+    imgui.set_next_window_pos(center, imgui.Cond_.appearing, imgui.ImVec2(0.5, 0.5))
+    imgui.set_next_window_size(imgui.ImVec2(340, 0), imgui.Cond_.appearing)
+    if imgui.begin_popup_modal("Keyboard Shortcuts##help", None,
+                               imgui.WindowFlags_.always_auto_resize)[0]:
+        rows = [
+            ("Scroll",          "Zoom in / out"),
+            ("Left drag",       "Pan"),
+            ("Right drag",      "Pan (alternative)"),
+            ("Shift + drag",    "Zoom box (rubber-band)"),
+            ("Double-click",    "Pin / unpin coordinate marker"),
+            ("R",               "Reset view / zoom to fit"),
+            ("Space",           "Play / pause animation"),
+            ("Ctrl + S",        "Save screenshot as PNG"),
+            ("Ctrl + O",        "Open data file"),
+            ("? (Shift + /)",   "Show this help"),
+        ]
+        if imgui.begin_table("##keys", 2, imgui.TableFlags_.borders_inner_h |
+                             imgui.TableFlags_.sizing_fixed_fit):
+            imgui.table_setup_column("Key",    imgui.TableColumnFlags_.width_fixed, 150)
+            imgui.table_setup_column("Action", imgui.TableColumnFlags_.width_stretch)
+            imgui.table_headers_row()
+            for key, action in rows:
+                imgui.table_next_row()
+                imgui.table_set_column_index(0); imgui.text(key)
+                imgui.table_set_column_index(1); imgui.text(action)
+            imgui.end_table()
+        imgui.spacing()
+        if imgui.button("Close", imgui.ImVec2(-1, 0)):
+            imgui.close_current_popup()
+        imgui.end_popup()
 
     # Resize handle
     if state.panel_open:

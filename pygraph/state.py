@@ -156,6 +156,8 @@ class AppState:
         self.panel_open  = True
         self.panel_width = 280
         self._save_screenshot_requested = False
+        self._copy_clipboard_requested  = False
+        self._show_help_popup: bool     = False
         self._zoom_box_active = False
         self._zoom_box_start  = (0.0, 0.0)  # screen coords where Shift+drag began
         self.pinned_points: list = []        # list of (x, y, label_str) tuples
@@ -789,6 +791,10 @@ class AppState:
             if io.key_ctrl and imgui.is_key_pressed(imgui.Key.s):
                 self._save_screenshot_requested = True
 
+            # ? → help popup
+            if imgui.is_key_pressed(imgui.Key.slash) and io.key_shift:
+                self._show_help_popup = True
+
         if io.want_capture_mouse and not mouse_in_plot:
             return
 
@@ -995,3 +1001,64 @@ class AppState:
                 os.unlink(tmp_path)
 
         threading.Thread(target=_show_dialog, args=(tmp.name,), daemon=True).start()
+
+    def copy_to_clipboard(self):
+        """Copy the current framebuffer image to the system clipboard."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.last_error = "Clipboard copy requires Pillow: pip install Pillow"
+            return
+
+        import sys, io as _io
+
+        imgui_io = imgui.get_io()
+        W = int(imgui_io.display_size.x * imgui_io.display_framebuffer_scale.x)
+        H = int(imgui_io.display_size.y * imgui_io.display_framebuffer_scale.y)
+
+        glPixelStorei(GL_PACK_ALIGNMENT, 1)
+        raw = glReadPixels(0, 0, W, H, GL_RGB, GL_UNSIGNED_BYTE)
+        buf = np.frombuffer(raw, dtype=np.uint8).reshape(H, W, 3)[::-1]
+        img = Image.fromarray(buf)
+
+        try:
+            import platform
+            plat = platform.system()
+            if plat == "Darwin":
+                import subprocess, tempfile, os
+                tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                tmp.close()
+                img.save(tmp.name)
+                subprocess.run(
+                    ["osascript", "-e",
+                     f'set the clipboard to (read (POSIX file "{tmp.name}") as JPEG picture)'],
+                    check=True)
+                os.unlink(tmp.name)
+            elif plat == "Windows":
+                import win32clipboard, io as _io2
+                output = _io2.BytesIO()
+                img.convert("RGB").save(output, "BMP")
+                data = output.getvalue()[14:]
+                output.close()
+                win32clipboard.OpenClipboard()
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+                win32clipboard.CloseClipboard()
+            else:
+                # Linux — try xclip then xsel
+                import subprocess, tempfile, os
+                tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                tmp.close()
+                img.save(tmp.name)
+                try:
+                    subprocess.run(
+                        ["xclip", "-selection", "clipboard", "-t", "image/png", "-i", tmp.name],
+                        check=True)
+                except FileNotFoundError:
+                    subprocess.run(
+                        ["xsel", "--clipboard", "--input", tmp.name],
+                        check=True)
+                os.unlink(tmp.name)
+            self.last_error = ""
+        except Exception as e:
+            self.last_error = f"Clipboard error: {e}"
