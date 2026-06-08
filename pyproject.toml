@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pygraph"
+version = "0.1.0"
+description = "OpenGL-based interactive math function plotter"
+requires-python = ">=3.10"
+dependencies = [
+    "PyOpenGL>=3.1.7",
+    "imgui_bundle>=1.5.0",
+    "numpy>=1.24",
+    "sympy>=1.12",
+    "Pillow>=9.0",
+]
+
+[project.scripts]
+pygraph = "pygraph.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+pygraph = ["*.csv"]

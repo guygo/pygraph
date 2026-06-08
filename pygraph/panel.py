@@ -1,6 +1,6 @@
 import numpy as np
 from imgui_bundle import imgui
-from plot_slot import (PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA,
+from .plot_slot import (PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA,
                        PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN,
                        PLOT_TYPE_NAMES)
 

@@ -8,7 +8,7 @@ All coordinates are projected via the same MVP + viewport as the surface.
 """
 import numpy as np
 from imgui_bundle import imgui
-from util import format_label
+from .util import format_label
 
 
 def _project(pt, MVP, viewport):

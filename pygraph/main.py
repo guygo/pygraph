@@ -2,11 +2,11 @@ import traceback
 import threading
 from OpenGL.GL import *
 from imgui_bundle import imgui, hello_imgui
-from state import AppState
-from gui import plot_rect
-from panel import draw_panel
-from renderer import render_frame
-from session import load_session, save_session
+from .state import AppState
+from .gui import plot_rect
+from .panel import draw_panel
+from .renderer import render_frame
+from .session import load_session, save_session
 
 state = AppState()
 
@@ -205,7 +205,7 @@ def _setup_style():
     _apply_style(dark=False)
 
 
-if __name__ == "__main__":
+def main():
     params = hello_imgui.RunnerParams()
     params.app_window_params.window_title = "PyGraph"
     params.app_window_params.window_geometry.size = (1280, 720)
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     )
     params.imgui_window_params.show_menu_bar = True
     try:
-        params.imgui_window_params.menu_app_title = ""   # suppress duplicate title in menu bar
+        params.imgui_window_params.menu_app_title = ""
     except AttributeError:
         pass
 
@@ -227,6 +227,10 @@ if __name__ == "__main__":
         hello_imgui.run(params)
     except SystemError as e:
         if "nb_func_error_except" in str(e):
-            pass   # nanobind/Python-3.14 cleanup race – harmless, app already finished
+            pass
         else:
             raise
+
+
+if __name__ == "__main__":
+    main()

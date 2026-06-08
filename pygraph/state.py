@@ -4,16 +4,16 @@ import os
 import sympy as sp
 from OpenGL.GL import *
 import numpy as np
-from util import parse_to_numpy, default_expr, default_expr_3d
-from plot import DynamicLinePlot, GridGeometry, BackgroundQuad, ColoredMesh
-from plot3d import SurfacePlot3D
-from plot3d_parametric import ParametricSurfacePlot
-from plot3d_curve import SpaceCurve3D
-from plot_slot import PlotSlot
+from .util import parse_to_numpy, default_expr, default_expr_3d
+from .plot import DynamicLinePlot, GridGeometry, BackgroundQuad, ColoredMesh
+from .plot3d import SurfacePlot3D
+from .plot3d_parametric import ParametricSurfacePlot
+from .plot3d_curve import SpaceCurve3D
+from .plot_slot import PlotSlot
 import time
-from shaders import *
-from shaders3d import *
-from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
+from .shaders import *
+from .shaders3d import *
+from .plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
 from OpenGL.GL.shaders import compileProgram, compileShader
 from imgui_bundle import imgui
 
@@ -228,7 +228,7 @@ class AppState:
             compileShader(POINT_VERTEX_SHADER,   GL_VERTEX_SHADER),
             compileShader(POINT_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
         )
-        from shaders import COLORED_VERTEX_SHADER, COLORED_FRAGMENT_SHADER
+        from .shaders import COLORED_VERTEX_SHADER, COLORED_FRAGMENT_SHADER
         self.plot_colored_shader = compileProgram(
             compileShader(COLORED_VERTEX_SHADER,   GL_VERTEX_SHADER),
             compileShader(COLORED_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
@@ -485,8 +485,8 @@ class AppState:
     #  Data file loading
     # ================================================================
     def load_data_file(self, path):
-        from data_loader import load_file
-        from plot_hist import HistogramPlot
+        from .data_loader import load_file
+        from .plot_hist import HistogramPlot
         try:
             col_names, data = load_file(path)
         except Exception as e:
@@ -775,7 +775,7 @@ class AppState:
                 if not self.mode_3d:
                     self.zoom_to_fit_2d()
                 else:
-                    from panel import _CAM_THETA_DEFAULT, _CAM_PHI_DEFAULT, _CAM_DIST_DEFAULT
+                    from .panel import _CAM_THETA_DEFAULT, _CAM_PHI_DEFAULT, _CAM_DIST_DEFAULT
                     self.cam_theta = _CAM_THETA_DEFAULT
                     self.cam_phi   = _CAM_PHI_DEFAULT
                     self.cam_dist  = _CAM_DIST_DEFAULT
@@ -844,7 +844,7 @@ class AppState:
             best_dist, best_pt = 1e9, None
             for slot in self.plots:
                 if slot.plot_type == 0 and slot._sampled_y is not None:
-                    from plot_slot import PLOT_EQUATION
+                    from .plot_slot import PLOT_EQUATION
                     xs = np.linspace(*self._sample_range(), len(slot._sampled_y), dtype=np.float32)
                     ys = slot._sampled_y
                     # Find closest valid sample to click_x
@@ -866,7 +866,7 @@ class AppState:
                 for c in close:
                     self.pinned_points.remove(c)
             else:
-                from util import format_label
+                from .util import format_label
                 self.pinned_points.append(
                     (px_val, py_val, f"({format_label(px_val)}, {format_label(py_val)})"))
 
@@ -892,7 +892,7 @@ class AppState:
                 self.cam_dist * (1.0 - io.mouse_wheel * 0.08), 0.3, 30.0))
         # Double-click → reset camera
         if mouse_in_plot and imgui.is_mouse_double_clicked(imgui.MouseButton_.left):
-            from panel import _CAM_THETA_DEFAULT, _CAM_PHI_DEFAULT, _CAM_DIST_DEFAULT
+            from .panel import _CAM_THETA_DEFAULT, _CAM_PHI_DEFAULT, _CAM_DIST_DEFAULT
             self.cam_theta = _CAM_THETA_DEFAULT
             self.cam_phi   = _CAM_PHI_DEFAULT
             self.cam_dist  = _CAM_DIST_DEFAULT

@@ -2,10 +2,10 @@ import time
 import numpy as np
 from OpenGL.GL import *
 from imgui_bundle import imgui
-from gui import (draw_axis_labels, draw_grid_lines, draw_axis_lines,
+from .gui import (draw_axis_labels, draw_grid_lines, draw_axis_lines,
                  draw_cursor_readout, draw_zoom_box, draw_pinned_points)
-from overlay3d import draw_3d_overlay
-from plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
+from .overlay3d import draw_3d_overlay
+from .plot_slot import PLOT_EQUATION, PLOT_SCATTER, PLOT_LINE_DATA, PLOT_HISTOGRAM, PLOT_KDE, PLOT_HEATMAP2D, PLOT_VIOLIN
 
 _EFFECT_WIDTH_MULT = {1: 2.8, 2: 2.2, 3: 2.8}
 

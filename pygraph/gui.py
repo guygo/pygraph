@@ -1,5 +1,5 @@
 from imgui_bundle import imgui
-from util import format_label
+from .util import format_label
 import numpy as np
 import math
 
